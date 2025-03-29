@@ -13,25 +13,33 @@ load_dotenv()
 
 token = os.getenv('DISCORD_TOKEN')
 guild_id = os.getenv('GUILD_ID')  # Optional: for guild-specific commands
+admin_role_id = os.getenv('ADMIN_ROLE_ID')  # Role ID for admin commands
 
-# User data storage
-USER_DATA_FILE = "user_data.json"
+# Bot data storage
+BOT_DATA_FILE = "bot_data.json"
 
-# Load existing user data or create empty dict
-def load_user_data():
+# Load existing bot data or create empty dict
+def load_bot_data():
     try:
-        with open(USER_DATA_FILE, 'r') as f:
+        with open(BOT_DATA_FILE, 'r') as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+        return {
+            "is_authenticated": False,
+            "email": "",
+            "cai_token": "",
+            "default_character": "",
+            "default_character_name": "",
+            "chats": {}
+        }
 
-# Save user data to file
-def save_user_data(user_data):
-    with open(USER_DATA_FILE, 'w') as f:
-        json.dump(user_data, f)
+# Save bot data to file
+def save_bot_data(bot_data):
+    with open(BOT_DATA_FILE, 'w') as f:
+        json.dump(bot_data, f)
 
-# Initialize user data
-user_data = load_user_data()
+# Initialize bot data
+bot_data = load_bot_data()
 
 # Set up intents
 intents = discord.Intents.default()
@@ -62,69 +70,87 @@ class CharacterAIBot(commands.Bot):
 
 bot = CharacterAIBot()
 
-# Login command
-@bot.tree.command(name="login", description="Start the login process")
+# Check if user has admin role
+def has_admin_role(interaction: discord.Interaction):
+    if not admin_role_id:
+        # If no admin role is configured, default to server admins
+        return interaction.user.guild_permissions.administrator
+    
+    # Check if user has the specified admin role
+    return any(role.id == int(admin_role_id) for role in interaction.user.roles)
+
+# Admin-only login command
+@bot.tree.command(name="login", description="[Admin] Start the login process")
 @app_commands.describe(email="Your Character.AI account email")
 async def login_slash(interaction: discord.Interaction, email: str):
-    """Sends the verification code to the user's email"""
-    user_id = str(interaction.user.id)
+    """Sends the verification code to the admin's email"""
+    # Check if user has admin permissions
+    if not has_admin_role(interaction):
+        await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
+        return
     
-    # Store the email for this specific user
-    if user_id not in user_data:
-        user_data[user_id] = {}
-    
-    user_data[user_id]['email'] = email
-    save_user_data(user_data)
+    # Store the email
+    bot_data['email'] = email
+    bot_data['is_authenticated'] = False
+    save_bot_data(bot_data)
     
     await interaction.response.send_message(f"Sending verification code to {email}", ephemeral=True)
     sendCode(email)
-    await interaction.followup.send(f"Please check your email for the verification link.", ephemeral=True)
+    await interaction.followup.send(f"Please check your email for the verification link and use /verify with the link.", ephemeral=True)
 
-# Verify command
-@bot.tree.command(name="verify", description="Verify with the link from your email")
+# Admin-only verify command
+@bot.tree.command(name="verify", description="[Admin] Verify with the link from your email")
 @app_commands.describe(link="The verification link from your email")
 async def verify_slash(interaction: discord.Interaction, link: str):
-    """Verifies the user's email"""
-    user_id = str(interaction.user.id)
+    """Verifies the admin's email"""
+    # Check if user has admin permissions
+    if not has_admin_role(interaction):
+        await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
+        return
     
-    # Check if user has logged in
-    if user_id not in user_data or 'email' not in user_data[user_id]:
+    # Check if email is already set
+    if 'email' not in bot_data or not bot_data['email']:
         await interaction.response.send_message("Please login first with /login", ephemeral=True)
         return
     
     await interaction.response.defer(ephemeral=True)
     
     try:
-        email = user_data[user_id]['email']
+        email = bot_data['email']
         token = authUser(link, email)
         
-        # Store the token for this user
-        user_data[user_id]['token'] = token
-        save_user_data(user_data)
+        # Store the token
+        bot_data['cai_token'] = token
+        bot_data['is_authenticated'] = True
+        save_bot_data(bot_data)
         
         client = aiocai.Client(token)
         me = await client.get_me()
         await interaction.followup.send(f"Successfully verified and logged in as {me.name}", ephemeral=True)
+        await interaction.followup.send("Now anyone can chat with characters using /chat or /talk commands!", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"Error during verification: {str(e)}", ephemeral=True)
 
-# Set character command
-@bot.tree.command(name="setcharacter", description="Set your default character")
+# Admin-only set character command
+@bot.tree.command(name="setcharacter", description="[Admin] Set the default character")
 @app_commands.describe(character_id="The character ID from Character.AI")
 async def set_character_slash(interaction: discord.Interaction, character_id: str):
     """Sets the default character to chat with"""
-    user_id = str(interaction.user.id)
+    # Check if user has admin permissions
+    if not has_admin_role(interaction):
+        await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
+        return
     
-    # Make sure user is authenticated
-    if user_id not in user_data or 'token' not in user_data[user_id]:
-        await interaction.response.send_message("You need to login and verify first. Use /login and then /verify", ephemeral=True)
+    # Make sure bot is authenticated
+    if not bot_data['is_authenticated']:
+        await interaction.response.send_message("Bot is not authenticated. An admin needs to use /login and /verify first.", ephemeral=True)
         return
     
     await interaction.response.defer()
     
     # Verify character ID is valid and get character name
     try:
-        token = user_data[user_id]['token']
+        token = bot_data['cai_token']
         client = aiocai.Client(token)
         
         async with await client.connect() as chat:
@@ -135,28 +161,25 @@ async def set_character_slash(interaction: discord.Interaction, character_id: st
                 character_name = answer.name
                 
                 # Store the default character ID
-                if user_id not in user_data:
-                    user_data[user_id] = {}
+                bot_data['default_character'] = character_id
+                bot_data['default_character_name'] = character_name
                 
-                user_data[user_id]['default_character'] = character_id
-                user_data[user_id]['default_character_name'] = character_name
-                
-                # If we have chats but not for this character, initialize it
-                if 'chats' not in user_data[user_id]:
-                    user_data[user_id]['chats'] = {}
+                # Initialize chats if needed
+                if 'chats' not in bot_data:
+                    bot_data['chats'] = {}
                 
                 # Store the chat ID for future use
-                chat_data = user_data[user_id]['chats']
+                chat_data = bot_data['chats']
                 chat_key = character_id
                 chat_data[chat_key] = {
                     'chat_id': new.chat_id,
                     'name': character_name  # Store the character name
                 }
                 
-                save_user_data(user_data)
+                save_bot_data(bot_data)
                 
                 await interaction.followup.send(f"Default character set to: **{character_name}** (ID: {character_id})")
-                await interaction.followup.send("You can now use /chat to talk to this character without specifying the ID each time.")
+                await interaction.followup.send("Anyone can now use /chat to talk to this character without specifying the ID.")
                 await interaction.followup.send(f"**{answer.name}**: {answer.text}")
             except Exception as e:
                 await interaction.followup.send(f"Error: Invalid character ID or couldn't connect to character. Please check the ID and try again.")
@@ -164,41 +187,40 @@ async def set_character_slash(interaction: discord.Interaction, character_id: st
     except Exception as e:
         await interaction.followup.send(f"Error validating character: {str(e)}")
 
-# Chat command
-@bot.tree.command(name="chat", description="Chat with your default character")
+# Chat command (available to everyone)
+@bot.tree.command(name="chat", description="Chat with the default character")
 @app_commands.describe(message="Your message to the character")
 async def chat_slash(interaction: discord.Interaction, message: str):
-    """Chat with your default character"""
-    user_id = str(interaction.user.id)
-    
-    # Check if user is authenticated
-    if user_id not in user_data or 'token' not in user_data[user_id]:
-        await interaction.response.send_message("You need to login and verify first. Use /login and then /verify", ephemeral=True)
+    """Chat with the default character"""
+    # Make sure bot is authenticated
+    if not bot_data['is_authenticated']:
+        await interaction.response.send_message("Bot is not authenticated. An admin needs to use /login and /verify first.", ephemeral=True)
         return
     
-    # Check if user has set a default character
-    if 'default_character' not in user_data[user_id]:
-        await interaction.response.send_message("You need to set a default character first. Use /setcharacter", ephemeral=True)
+    # Check if default character is set
+    if 'default_character' not in bot_data or not bot_data['default_character']:
+        await interaction.response.send_message("No default character set. An admin needs to use /setcharacter first.", ephemeral=True)
         return
     
-    character_id = user_data[user_id]['default_character']
-    character_name = user_data[user_id].get('default_character_name', 'Character')
+    character_id = bot_data['default_character']
+    character_name = bot_data.get('default_character_name', 'Character')
     
     await interaction.response.defer()
     
     try:
-        token = user_data[user_id]['token']
+        token = bot_data['cai_token']
         client = aiocai.Client(token)
         
-        # Get or create chat
-        if 'chats' not in user_data[user_id]:
-            user_data[user_id]['chats'] = {}
+        # Make sure chats dict exists
+        if 'chats' not in bot_data:
+            bot_data['chats'] = {}
         
         # Create or get existing chat
-        chat_data = user_data[user_id]['chats']
+        chat_data = bot_data['chats']
         chat_key = character_id
         
-        await interaction.followup.send(f"Sending message to **{character_name}**... please wait")
+        await interaction.followup.send(f"**{interaction.user.display_name}**: {message}")
+        await interaction.followup.send(f"*{character_name} is typing...*")
         
         async with await client.connect() as chat:
             if chat_key not in chat_data:
@@ -209,7 +231,7 @@ async def chat_slash(interaction: discord.Interaction, message: str):
                     'chat_id': new.chat_id,
                     'name': answer.name  # Store the character name
                 }
-                save_user_data(user_data)
+                save_bot_data(bot_data)
                 await interaction.followup.send(f"**{answer.name}**: {answer.text}")
             else:
                 # Use existing chat
@@ -219,13 +241,13 @@ async def chat_slash(interaction: discord.Interaction, message: str):
                 # Update name if it doesn't exist or has changed
                 if 'name' not in chat_data[chat_key] or chat_data[chat_key]['name'] != message_response.name:
                     chat_data[chat_key]['name'] = message_response.name
-                    save_user_data(user_data)
+                    save_bot_data(bot_data)
                 
                 await interaction.followup.send(f"**{message_response.name}**: {message_response.text}")
     except Exception as e:
         await interaction.followup.send(f"Error talking to character: {str(e)}")
 
-# Talk command
+# Talk command (available to everyone)
 @bot.tree.command(name="talk", description="Talk to a specific character by ID")
 @app_commands.describe(
     character_id="The character ID from Character.AI",
@@ -233,28 +255,27 @@ async def chat_slash(interaction: discord.Interaction, message: str):
 )
 async def talk_slash(interaction: discord.Interaction, character_id: str, message: str):
     """Talk to a Character.AI character"""
-    user_id = str(interaction.user.id)
-    
-    # Check if user is authenticated
-    if user_id not in user_data or 'token' not in user_data[user_id]:
-        await interaction.response.send_message("You need to login and verify first. Use /login and then /verify", ephemeral=True)
+    # Make sure bot is authenticated
+    if not bot_data['is_authenticated']:
+        await interaction.response.send_message("Bot is not authenticated. An admin needs to use /login and /verify first.", ephemeral=True)
         return
     
     await interaction.response.defer()
     
     try:
-        token = user_data[user_id]['token']
+        token = bot_data['cai_token']
         client = aiocai.Client(token)
         
-        # Get or create chat
-        if 'chats' not in user_data[user_id]:
-            user_data[user_id]['chats'] = {}
+        # Make sure chats dict exists
+        if 'chats' not in bot_data:
+            bot_data['chats'] = {}
         
         # Create or get existing chat
-        chat_data = user_data[user_id]['chats']
+        chat_data = bot_data['chats']
         chat_key = character_id
         
-        await interaction.followup.send("Sending message to character... please wait")
+        await interaction.followup.send(f"**{interaction.user.display_name}**: {message}")
+        await interaction.followup.send("*Character is typing...*")
         
         async with await client.connect() as chat:
             if chat_key not in chat_data:
@@ -265,7 +286,7 @@ async def talk_slash(interaction: discord.Interaction, character_id: str, messag
                     'chat_id': new.chat_id,
                     'name': answer.name  # Store the character name
                 }
-                save_user_data(user_data)
+                save_bot_data(bot_data)
                 await interaction.followup.send(f"**{answer.name}**: {answer.text}")
             else:
                 # Use existing chat
@@ -275,48 +296,46 @@ async def talk_slash(interaction: discord.Interaction, character_id: str, messag
                 # Update name if it doesn't exist or has changed
                 if 'name' not in chat_data[chat_key] or chat_data[chat_key]['name'] != message_response.name:
                     chat_data[chat_key]['name'] = message_response.name
-                    save_user_data(user_data)
+                    save_bot_data(bot_data)
                 
                 await interaction.followup.send(f"**{message_response.name}**: {message_response.text}")
     except Exception as e:
         await interaction.followup.send(f"Error talking to character: {str(e)}")
 
-# List characters command
-@bot.tree.command(name="listcharacters", description="List all characters you've interacted with")
+# List characters command (available to everyone)
+@bot.tree.command(name="listcharacters", description="List all available characters")
 async def list_characters_slash(interaction: discord.Interaction):
-    """Lists all characters you've interacted with"""
-    user_id = str(interaction.user.id)
-    
-    # Check if user is authenticated
-    if user_id not in user_data or 'token' not in user_data[user_id]:
-        await interaction.response.send_message("You need to login and verify first. Use /login and then /verify", ephemeral=True)
+    """Lists all characters the bot has interacted with"""
+    # Make sure bot is authenticated
+    if not bot_data['is_authenticated']:
+        await interaction.response.send_message("Bot is not authenticated. An admin needs to use /login and /verify first.", ephemeral=True)
         return
     
-    # Check if user has any chats
-    if 'chats' not in user_data[user_id] or not user_data[user_id]['chats']:
-        await interaction.response.send_message("You haven't interacted with any characters yet. Use /talk to start a conversation.", ephemeral=True)
+    # Check if any chats exist
+    if 'chats' not in bot_data or not bot_data['chats']:
+        await interaction.response.send_message("No characters available yet. Use /talk to start a conversation with a character.", ephemeral=True)
         return
     
     # Create embed with character list
     embed = discord.Embed(
-        title="Your Characters",
-        description="Characters you've interacted with",
+        title="Available Characters",
+        description="Characters that anyone can talk to",
         color=discord.Color.green()
     )
     
     # Get default character if set
-    default_char_id = user_data[user_id].get('default_character', None)
-    default_char_name = user_data[user_id].get('default_character_name', 'Unknown')
+    default_char_id = bot_data.get('default_character', None)
+    default_char_name = bot_data.get('default_character_name', 'Unknown')
     
     if default_char_id:
         embed.add_field(
             name="Default Character",
-            value=f"**{default_char_name}** (ID: `{default_char_id}`)",
+            value=f"**{default_char_name}** (ID: `{default_char_id}`)\nUse /chat to talk to this character",
             inline=False
         )
     
     # Add all characters from chat history
-    chats = user_data[user_id]['chats']
+    chats = bot_data['chats']
     
     # Sort characters by character ID
     character_list = []
@@ -342,144 +361,117 @@ async def list_characters_slash(interaction: discord.Interaction):
         if other_chars:
             embed.add_field(
                 name="Other Characters",
-                value=other_chars,
+                value=f"{other_chars}\nUse /talk with the character ID to talk to these characters",
                 inline=False
             )
         else:
             embed.add_field(
                 name="Other Characters",
-                value="You haven't chatted with any other characters yet.",
+                value="No other characters available yet.",
                 inline=False
             )
     
-    embed.set_footer(text="Use /setcharacter to set your default character")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    embed.set_footer(text="Admins can use /setcharacter to change the default character")
+    await interaction.response.send_message(embed=embed)
 
-# Delete chat command
-@bot.tree.command(name="deletechat", description="Delete chat history with a character by ID")
-@app_commands.describe(character_id="The character ID to delete")
-async def delete_chat_slash(interaction: discord.Interaction, character_id: str):
-    """Delete your chat history with a specific character"""
-    user_id = str(interaction.user.id)
-    
-    # Check if user is authenticated
-    if user_id not in user_data or 'token' not in user_data[user_id]:
-        await interaction.response.send_message("You need to login and verify first. Use /login and then /verify", ephemeral=True)
+# Admin-only reset chat command
+@bot.tree.command(name="resetchat", description="[Admin] Reset the chat with a character")
+@app_commands.describe(character_id="The character ID to reset chat for")
+async def reset_chat_slash(interaction: discord.Interaction, character_id: str):
+    """Reset the chat with a specific character"""
+    # Check if user has admin permissions
+    if not has_admin_role(interaction):
+        await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
         return
     
-    # Check if user has any chats
-    if 'chats' not in user_data[user_id] or not user_data[user_id]['chats']:
-        await interaction.response.send_message("You don't have any chat history to delete.", ephemeral=True)
+    # Make sure bot is authenticated
+    if not bot_data['is_authenticated']:
+        await interaction.response.send_message("Bot is not authenticated. An admin needs to use /login and /verify first.", ephemeral=True)
+        return
+    
+    # Check if any chats exist
+    if 'chats' not in bot_data or not bot_data['chats']:
+        await interaction.response.send_message("No chats to reset.", ephemeral=True)
         return
     
     # Check if character exists in chats
-    chat_data = user_data[user_id]['chats']
+    chat_data = bot_data['chats']
     if character_id not in chat_data:
-        await interaction.response.send_message(f"No chat found with character ID: `{character_id}`\nUse /listcharacters to see your available characters.", ephemeral=True)
+        await interaction.response.send_message(f"No chat found with character ID: `{character_id}`\nUse /listcharacters to see available characters.", ephemeral=True)
+        return
+    
+    # Get character name before deletion
+    character_name = chat_data[character_id].get('name', 'Unknown Character')
+    
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        token = bot_data['cai_token']
+        client = aiocai.Client(token)
+        
+        # Create a new chat with the character
+        me = await client.get_me()
+        
+        async with await client.connect() as chat:
+            new, answer = await chat.new_chat(character_id, me.id)
+            chat_data[character_id] = {
+                'chat_id': new.chat_id,
+                'name': answer.name
+            }
+            save_bot_data(bot_data)
+            
+            await interaction.followup.send(f"Reset chat with **{character_name}** (ID: `{character_id}`)")
+            await interaction.followup.send(f"First message from character: **{answer.name}**: {answer.text}")
+    except Exception as e:
+        await interaction.followup.send(f"Error resetting chat: {str(e)}")
+
+# Admin-only delete chat command
+@bot.tree.command(name="deletechat", description="[Admin] Delete a character from the bot")
+@app_commands.describe(character_id="The character ID to delete")
+async def delete_chat_slash(interaction: discord.Interaction, character_id: str):
+    """Delete a character chat completely"""
+    # Check if user has admin permissions
+    if not has_admin_role(interaction):
+        await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
+        return
+    
+    # Make sure bot is authenticated
+    if not bot_data['is_authenticated']:
+        await interaction.response.send_message("Bot is not authenticated. An admin needs to use /login and /verify first.", ephemeral=True)
+        return
+    
+    # Check if any chats exist
+    if 'chats' not in bot_data or not bot_data['chats']:
+        await interaction.response.send_message("No chats to delete.", ephemeral=True)
+        return
+    
+    # Check if character exists in chats
+    chat_data = bot_data['chats']
+    if character_id not in chat_data:
+        await interaction.response.send_message(f"No chat found with character ID: `{character_id}`\nUse /listcharacters to see available characters.", ephemeral=True)
         return
     
     # Get character name before deletion
     character_name = chat_data[character_id].get('name', 'Unknown Character')
     
     # Check if this is the default character
-    is_default = user_data[user_id].get('default_character') == character_id
+    is_default = bot_data.get('default_character') == character_id
     
     # Delete the chat
     del chat_data[character_id]
     
     # If it was the default character, remove the default character setting
     if is_default:
-        user_data[user_id].pop('default_character', None)
-        user_data[user_id].pop('default_character_name', None)
-        await interaction.response.send_message(f"Deleted chat with **{character_name}** (ID: `{character_id}`)\nNote: This was your default character. You'll need to set a new default with /setcharacter.", ephemeral=True)
+        bot_data.pop('default_character', None)
+        bot_data.pop('default_character_name', None)
+        await interaction.response.send_message(f"Deleted chat with **{character_name}** (ID: `{character_id}`)\nNote: This was the default character. You'll need to set a new default with /setcharacter.", ephemeral=True)
     else:
         await interaction.response.send_message(f"Deleted chat with **{character_name}** (ID: `{character_id}`)", ephemeral=True)
     
-    # Save the updated user data
-    save_user_data(user_data)
+    # Save the updated bot data
+    save_bot_data(bot_data)
 
-# Delete character command
-@bot.tree.command(name="deletecharacter", description="Delete chat history with a character by name")
-@app_commands.describe(character_name="The character name to delete")
-async def delete_character_slash(interaction: discord.Interaction, character_name: str):
-    """Delete your chat history with a character by name"""
-    user_id = str(interaction.user.id)
-    
-    # Check if user is authenticated
-    if user_id not in user_data or 'token' not in user_data[user_id]:
-        await interaction.response.send_message("You need to login and verify first. Use /login and then /verify", ephemeral=True)
-        return
-    
-    # Check if user has any chats
-    if 'chats' not in user_data[user_id] or not user_data[user_id]['chats']:
-        await interaction.response.send_message("You don't have any chat history to delete.", ephemeral=True)
-        return
-    
-    await interaction.response.defer(ephemeral=True)
-    
-    # Find character ID by name
-    character_id = None
-    chats = user_data[user_id]['chats']
-    
-    # First check if this matches the default character name
-    default_char_id = user_data[user_id].get('default_character', None)
-    default_char_name = user_data[user_id].get('default_character_name', '')
-    
-    if default_char_name.lower() == character_name.lower():
-        character_id = default_char_id
-    else:
-        # Look through all chats for a name match
-        for char_id, chat_data in chats.items():
-            if 'name' in chat_data and chat_data['name'].lower() == character_name.lower():
-                character_id = char_id
-                break
-    
-    if not character_id:
-        # If no exact match, check for partial matches
-        possible_matches = []
-        
-        # Check default character for partial match
-        if default_char_name and character_name.lower() in default_char_name.lower():
-            possible_matches.append((default_char_id, default_char_name))
-        
-        # Check all chats for partial matches
-        for char_id, chat_data in chats.items():
-            if 'name' in chat_data and character_name.lower() in chat_data['name'].lower():
-                # Don't duplicate the default character
-                if char_id != default_char_id:
-                    possible_matches.append((char_id, chat_data['name']))
-        
-        if possible_matches:
-            # Found some partial matches
-            match_list = "\n".join([f"• **{name}** (ID: `{id}`)" for id, name in possible_matches])
-            await interaction.followup.send(f"I couldn't find an exact match for '{character_name}'. Did you mean one of these?\n{match_list}\nTry again with the exact name or use /deletechat with the ID")
-            return
-        else:
-            # No matches at all
-            await interaction.followup.send(f"I couldn't find any character named '{character_name}' in your chat history.\nUse /listcharacters to see all available characters.")
-            return
-    
-    # Get character name before deletion
-    character_name = chats[character_id].get('name', 'Unknown Character')
-    
-    # Check if this is the default character
-    is_default = user_data[user_id].get('default_character') == character_id
-    
-    # Delete the chat
-    del chats[character_id]
-    
-    # If it was the default character, remove the default character setting
-    if is_default:
-        user_data[user_id].pop('default_character', None)
-        user_data[user_id].pop('default_character_name', None)
-        await interaction.followup.send(f"Deleted chat with **{character_name}** (ID: `{character_id}`)\nNote: This was your default character. You'll need to set a new default with /setcharacter.")
-    else:
-        await interaction.followup.send(f"Deleted chat with **{character_name}** (ID: `{character_id}`)")
-    
-    # Save the updated user data
-    save_user_data(user_data)
-
-# Info command
+# Info command (available to everyone)
 @bot.tree.command(name="info", description="Show information about the bot")
 async def info_slash(interaction: discord.Interaction):
     """Shows info about the bot"""
@@ -488,21 +480,40 @@ async def info_slash(interaction: discord.Interaction):
         description="A Discord bot for Character.AI",
         color=discord.Color.blue()
     )
+    
+    # Status section
+    status = "✅ Ready" if bot_data.get('is_authenticated', False) else "❌ Not authenticated"
+    default_char = f"**{bot_data.get('default_character_name', 'None')}**" if bot_data.get('default_character', '') else "None"
+    
     embed.add_field(
-        name="Commands", 
-        value="/login - Start the login process\n"
-              "/verify - Verify with email link\n"
-              "/setcharacter - Set your default character\n"
-              "/listcharacters - Show all characters you've interacted with\n"
-              "/chat - Talk to your default character\n"
+        name="Status", 
+        value=f"Authentication: {status}\nDefault Character: {default_char}", 
+        inline=False
+    )
+    
+    # User commands
+    embed.add_field(
+        name="Everyone Commands", 
+        value="/chat - Talk to the default character\n"
               "/talk - Talk to a specific character by ID\n"
-              "/deletechat - Delete chat history with a character by ID\n"
-              "/deletecharacter - Delete chat history with a character by name\n"
+              "/listcharacters - Show all available characters\n"
               "/info - Show this help message", 
         inline=False
     )
+    
+    # Admin commands
+    embed.add_field(
+        name="Admin Commands", 
+        value="/login - Start the login process\n"
+              "/verify - Verify with email link\n"
+              "/setcharacter - Set the default character\n"
+              "/resetchat - Reset chat history with a character\n"
+              "/deletechat - Delete a character completely", 
+        inline=False
+    )
+    
     embed.set_footer(text="Created by NeuralCord")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed)
 
 # Keep old prefix commands for backward compatibility
 @bot.command()
