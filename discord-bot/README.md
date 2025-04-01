@@ -2,12 +2,18 @@
 
 A Discord bot for Character.AI that brings AI characters to your Discord server.
 
+![Version](https://img.shields.io/badge/version-0.9.0-blue)
+![Status](https://img.shields.io/badge/status-beta-orange)
+
 ## Features
 
 - Chat with Character.AI characters using commands
 - Enable "Social Mode" where the bot can naturally join conversations
+- Intelligent filter AI to determine when to engage in conversations
 - Support for multiple characters
+- Inappropriate content detection and filtering
 - Admin controls for managing characters and settings
+- API rate limiting to prevent abuse
 
 ## Requirements
 
@@ -16,14 +22,55 @@ A Discord bot for Character.AI that brings AI characters to your Discord server.
 - A Discord bot token
 - Ollama server (for Social Mode)
 
-## Setup
+## Quick Start
 
-1. Clone this repository
+1. Clone this repository:
+   ```
+   git clone https://github.com/yourusername/characterai-discord-bot.git
+   cd characterai-discord-bot
+   ```
+
 2. Install dependencies:
-```
-pip install -r requirements.txt
-```
-3. Set up environment variables in a `.env` file:
+   ```
+   pip install -r discord-bot/requirements.txt
+   ```
+
+3. Copy the example environment file:
+   ```
+   cp discord-bot/.env.example discord-bot/.env
+   ```
+
+4. Edit the `.env` file with your Discord token and other settings
+
+5. Run the bot:
+   ```
+   cd discord-bot
+   python src/bot.py
+   ```
+
+## Detailed Setup Guide
+
+### Creating a Discord Bot
+
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+2. Click "New Application" and give it a name
+3. Go to the "Bot" tab and click "Add Bot"
+4. Under the "Privileged Gateway Intents" section, enable "Message Content Intent"
+5. Copy your bot token and add it to your `.env` file
+6. Go to OAuth2 > URL Generator, select `bot` and `applications.commands` scopes
+7. Select the following bot permissions:
+   - Send Messages
+   - Send Messages in Threads
+   - Embed Links
+   - Attach Files
+   - Read Message History
+   - Use Slash Commands
+8. Copy the generated URL and open it in your browser to add the bot to your server
+
+### Environment Configuration
+
+Create a `.env` file with the following variables:
+
 ```
 DISCORD_TOKEN=your_discord_bot_token
 GUILD_ID=optional_guild_id_for_testing
@@ -31,9 +78,58 @@ ADMIN_ROLE_ID=optional_role_id_for_admins
 OLLAMA_API_URL=http://localhost:11434/api
 OLLAMA_MODEL=mistral
 ```
-4. Run the bot:
+
+### Ollama Setup
+
+Social Mode requires an Ollama server running locally or remotely:
+
+1. Install Ollama from [ollama.ai](https://ollama.ai)
+2. Pull the desired model: `ollama pull mistral`
+3. Run the Ollama server (it will run on port 11434 by default)
+4. Set the `OLLAMA_API_URL` in your `.env` file
+
+## Deployment Options
+
+### Docker Deployment
+
+A Dockerfile is provided for easy deployment:
+
+```bash
+# Build the Docker image
+docker build -t characterai-discord-bot .
+
+# Run the container
+docker run -d --name characterai-bot \
+  --env-file .env \
+  -v $(pwd)/data:/app/data \
+  characterai-discord-bot
 ```
-python src/bot.py
+
+### Systemd Service (Linux)
+
+Create a systemd service file at `/etc/systemd/system/characterai-bot.service`:
+
+```ini
+[Unit]
+Description=Character.AI Discord Bot
+After=network.target
+
+[Service]
+User=yourusername
+WorkingDirectory=/path/to/characterai-discord-bot/discord-bot
+ExecStart=/usr/bin/python3 src/bot.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable and start the service:
+
+```bash
+sudo systemctl enable characterai-bot.service
+sudo systemctl start characterai-bot.service
 ```
 
 ## Commands
@@ -63,7 +159,6 @@ Social Mode allows the character to join conversations naturally without requiri
 1. The bot monitors messages in channels that have been added with `/addchannel`
 2. A filter AI analyzes conversations to determine when the character should respond
 3. When appropriate, the character will respond naturally as part of the conversation
-4. A cooldown period prevents the character from responding too frequently
 
 To use Social Mode:
 1. Make sure you have a default character set with `/setcharacter`
@@ -71,14 +166,42 @@ To use Social Mode:
 3. Add channels to monitor with `/addchannel`
 4. Optionally, adjust the cooldown with `/setcooldown`
 
-## Ollama Setup
+## Finding Character IDs
 
-Social Mode requires an Ollama server running locally or remotely. To set up:
+To find a character's ID:
+1. Go to [Character.AI](https://beta.character.ai)
+2. Navigate to the character's page
+3. The ID is in the URL: `https://beta.character.ai/chat?char=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX`
+4. Copy the ID (the part after `char=`)
 
-1. Install Ollama from [ollama.ai](https://ollama.ai)
-2. Pull the desired model: `ollama pull mistral`
-3. Run Ollama server
-4. Set the `OLLAMA_API_URL` in your `.env` file
+## Beta Testing Guidelines
+
+This is a beta release. Please report any issues and feedback through:
+- GitHub Issues
+- Discord server: [Join Here](https://discord.gg/yourdiscordserver)
+
+### Known Limitations
+- Character.AI rate limits may apply
+- Some characters may not respond as expected
+- Social Mode requires fine-tuning for optimal performance
+
+## Troubleshooting
+
+### Common Issues
+
+**Bot doesn't respond to commands**:
+- Check that the bot has proper permissions
+- Ensure message content intent is enabled
+- Check logs for errors
+
+**Character.AI authentication issues**:
+- Verify your Character.AI account credentials
+- Check your email for verification link
+
+**Social Mode not responding**:
+- Ensure Ollama server is running
+- Check if the channel is added to Social Mode
+- Verify the filter AI model is available
 
 ## Credits
 

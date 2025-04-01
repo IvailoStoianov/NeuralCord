@@ -3,6 +3,11 @@ Configuration settings for the Discord bot and Filter AI.
 This file centralizes all configurable parameters to make adjustments easier.
 """
 
+# Version information
+VERSION = "0.9.0"
+VERSION_NAME = "Beta"
+RELEASE_DATE = "2024-04-01"
+
 # FilterAI settings
 FILTER_AI_CONFIG = {
     # Maximum number of characters in conversation context sent to Character.AI
@@ -32,7 +37,14 @@ BOT_CONFIG = {
     "MIN_COOLDOWN": 1,
     
     # Default data file location
-    "DATA_FILE": "bot_data.json"
+    "DATA_FILE": "bot_data.json",
+    
+    # Rate limiting settings
+    "RATE_LIMIT": {
+        "ENABLED": True,
+        "MAX_CALLS_PER_MINUTE": 30,  # Maximum API calls per minute
+        "MAX_CALLS_PER_USER": 10     # Maximum API calls per user per minute
+    }
 }
 
 # Logging settings

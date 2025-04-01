@@ -1,0 +1,21 @@
+[Unit]
+Description=Character.AI Discord Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/characterai-discord-bot/discord-bot
+ExecStart=/usr/bin/python3 src/bot.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=characterai-bot
+Environment="PYTHONUNBUFFERED=1"
+
+# Uncomment and modify if you need to set environment variables
+# EnvironmentFile=/opt/characterai-discord-bot/discord-bot/.env
+
+[Install]
+WantedBy=multi-user.target 

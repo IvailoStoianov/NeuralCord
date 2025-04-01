@@ -7,9 +7,11 @@ from discord.ext import commands
 import os
 import json
 import logging
+import time
+from collections import defaultdict
 from dotenv import load_dotenv
 from filter_ai import FilterAI
-from config import BOT_CONFIG, FILTER_AI_CONFIG, LOGGING_CONFIG
+from config import BOT_CONFIG, FILTER_AI_CONFIG, LOGGING_CONFIG, VERSION, VERSION_NAME, RELEASE_DATE
 
 # Configure logging
 logging.basicConfig(
@@ -77,7 +79,16 @@ class CharacterAIBot(commands.Bot):
         self.synced = False
         self.filter_ai = FilterAI(model_name=ollama_model, api_url=ollama_api_url)
         self.last_response_time = {}  # Store last response time per channel
+        
+        # Rate limiting setup
+        self.api_calls = defaultdict(list)  # Store timestamps of API calls per user
+        self.total_api_calls = []  # Store timestamps of all API calls
+        self.rate_limit_enabled = BOT_CONFIG["RATE_LIMIT"]["ENABLED"]
+        self.max_calls_per_minute = BOT_CONFIG["RATE_LIMIT"]["MAX_CALLS_PER_MINUTE"]
+        self.max_calls_per_user = BOT_CONFIG["RATE_LIMIT"]["MAX_CALLS_PER_USER"]
+        
         logger.info(f"Bot initialized with Ollama model: {ollama_model}")
+        logger.info(f"Running version {VERSION} {VERSION_NAME} (released {RELEASE_DATE})")
 
     async def on_ready(self):
         await self.wait_until_ready()
@@ -224,6 +235,33 @@ class CharacterAIBot(commands.Bot):
                 logger.error(f"Error in social mode response: {str(e)}", exc_info=True)
                 print(f"Error in social mode response: {str(e)}")
 
+    async def _check_rate_limit(self, user_id):
+        """Check if user or system has hit rate limits"""
+        if not self.rate_limit_enabled:
+            return False
+            
+        current_time = time.time()
+        one_minute_ago = current_time - 60
+        
+        # Clean up old entries
+        self.api_calls[user_id] = [t for t in self.api_calls[user_id] if t > one_minute_ago]
+        self.total_api_calls = [t for t in self.total_api_calls if t > one_minute_ago]
+        
+        # Check user limit
+        if len(self.api_calls[user_id]) >= self.max_calls_per_user:
+            logger.warning(f"User {user_id} hit rate limit: {self.max_calls_per_user} calls per minute")
+            return True
+            
+        # Check global limit
+        if len(self.total_api_calls) >= self.max_calls_per_minute:
+            logger.warning(f"System hit global rate limit: {self.max_calls_per_minute} calls per minute")
+            return True
+            
+        # Record this call
+        self.api_calls[user_id].append(current_time)
+        self.total_api_calls.append(current_time)
+        return False
+
 bot = CharacterAIBot()
 
 # Check if user has admin role
@@ -365,6 +403,11 @@ async def chat_slash(interaction: discord.Interaction, message: str):
         await interaction.response.send_message("No default character set. An admin needs to use /setcharacter first.", ephemeral=True)
         return
     
+    # Check rate limits
+    if await bot._check_rate_limit(interaction.user.id):
+        await interaction.response.send_message("You're sending messages too quickly! Please wait a moment and try again.", ephemeral=True)
+        return
+    
     character_id = bot_data['default_character']
     character_name = bot_data.get('default_character_name', 'Character')
     
@@ -426,6 +469,11 @@ async def talk_slash(interaction: discord.Interaction, character_id: str, messag
     # Make sure bot is authenticated
     if not bot_data['is_authenticated']:
         await interaction.response.send_message("Bot is not authenticated. An admin needs to use /login and /verify first.", ephemeral=True)
+        return
+    
+    # Check rate limits
+    if await bot._check_rate_limit(interaction.user.id):
+        await interaction.response.send_message("You're sending messages too quickly! Please wait a moment and try again.", ephemeral=True)
         return
     
     await interaction.response.defer()
@@ -649,7 +697,7 @@ async def info_slash(interaction: discord.Interaction):
     """Shows info about the bot"""
     embed = discord.Embed(
         title="Bot Info",
-        description="A Discord bot for Character.AI",
+        description=f"A Discord bot for Character.AI\nVersion {VERSION} {VERSION_NAME}",
         color=discord.Color.blue()
     )
     
@@ -690,7 +738,7 @@ async def info_slash(interaction: discord.Interaction):
         inline=False
     )
     
-    embed.set_footer(text="Created by NeuralCord")
+    embed.set_footer(text=f"Created by NeuralCord • Released {RELEASE_DATE}")
     await interaction.response.send_message(embed=embed)
 
 # Admin-only social mode toggle command

@@ -1,0 +1,35 @@
+version: '3'
+
+services:
+  discord-bot:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: characterai-discord-bot
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - BOT_DATA_FILE=/app/data/bot_data.json
+      - LOGGING_CONFIG_BOT_LOG_FILE=/app/data/bot.log
+      - LOGGING_CONFIG_FILTER_LOG_FILE=/app/data/filter_ai.log
+    networks:
+      - bot-network
+
+  # Optional: Ollama service for running models locally
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   volumes:
+  #     - ./ollama:/root/.ollama
+  #   ports:
+  #     - "11434:11434"
+  #   restart: unless-stopped
+  #   networks:
+  #     - bot-network
+
+networks:
+  bot-network:
+    driver: bridge 
