@@ -738,7 +738,7 @@ async def info_slash(interaction: discord.Interaction):
         inline=False
     )
     
-    embed.set_footer(text=f"Created by NeuralCord • Released {RELEASE_DATE}")
+    embed.set_footer(text=f"Created by Ivailo Stoianov • Released {RELEASE_DATE}")
     await interaction.response.send_message(embed=embed)
 
 # Admin-only social mode toggle command

@@ -1,6 +1,6 @@
-# Character.AI Discord Bot Testing Guide
+# Neural Cord Testing Guide
 
-This document outlines procedures for testing the Character.AI Discord Bot during the beta phase.
+This document outlines procedures for testing Neural Cord during the beta phase.
 
 ## Test Environment Setup
 
@@ -85,4 +85,4 @@ What needs improvement: [Constructive feedback]
 Suggestions: [Your ideas for improvement]
 ```
 
-Thank you for helping test the Character.AI Discord Bot! 
+Thank you for helping test Neural Cord! 

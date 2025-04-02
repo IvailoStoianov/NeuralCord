@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Character.AI Discord Bot Installer
-# This script installs and configures the Character.AI Discord Bot
+# Neural Cord Discord Bot Installer
+# This script installs and configures Neural Cord
 
 set -e
 
 echo "====================================="
-echo "Character.AI Discord Bot Installer"
+echo "Neural Cord Discord Bot Installer"
 echo "====================================="
 
 # Check if script is run as root
@@ -16,11 +16,11 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Default installation directory
-INSTALL_DIR="/opt/characterai-discord-bot"
+INSTALL_DIR="/opt/neuralcord"
 CONFIG_DIR="$INSTALL_DIR/discord-bot"
-SERVICE_NAME="characterai-bot"
+SERVICE_NAME="neuralcord"
 
-echo "This script will install the Character.AI Discord Bot to $INSTALL_DIR"
+echo "This script will install Neural Cord to $INSTALL_DIR"
 echo
 
 # Create installation directory
@@ -34,7 +34,7 @@ if [ -d "$INSTALL_DIR/.git" ]; then
   cd $INSTALL_DIR
   git pull
 else
-  git clone https://github.com/yourusername/characterai-discord-bot.git $INSTALL_DIR
+  git clone https://github.com/IvailoStoianov/NeuralCord.git $INSTALL_DIR
 fi
 
 # Install dependencies
@@ -56,7 +56,7 @@ fi
 
 # Install systemd service
 echo "Installing systemd service..."
-cp $CONFIG_DIR/deploy/characterai-bot.service /etc/systemd/system/$SERVICE_NAME.service
+cp $CONFIG_DIR/deploy/neuralcord.service /etc/systemd/system/$SERVICE_NAME.service
 systemctl daemon-reload
 
 echo
@@ -72,4 +72,4 @@ echo "- Check status: sudo systemctl status $SERVICE_NAME"
 echo "- View logs: sudo journalctl -u $SERVICE_NAME -f"
 echo "- Restart: sudo systemctl restart $SERVICE_NAME"
 echo
-echo "Thank you for installing the Character.AI Discord Bot!" 
+echo "Thank you for installing Neural Cord!" 

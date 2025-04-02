@@ -1,9 +1,22 @@
-# Character.AI Discord Bot
+# Neural Cord - Character.AI Discord Bot 
 
 A Discord bot for Character.AI that brings AI characters to your Discord server.
 
 ![Version](https://img.shields.io/badge/version-0.9.0-blue)
 ![Status](https://img.shields.io/badge/status-beta-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+## ⚠️ Important Warnings
+
+1. **Unofficial API Usage**
+   - This bot uses the unofficial Character.AI API by [kramcat](https://github.com/kramcat/CharacterAI)
+   - If Character.AI changes their platform or API, this bot may stop working
+   - I am not affiliated with Character.AI and cannot guarantee future compatibility
+
+2. **Ollama Model Requirements**
+   - Some Ollama models (especially larger ones) can be very GPU-intensive
+   - Running these models may require significant system resources
+   - Use at your own risk and monitor your system's performance
 
 ## Features
 
@@ -26,8 +39,8 @@ A Discord bot for Character.AI that brings AI characters to your Discord server.
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/characterai-discord-bot.git
-   cd characterai-discord-bot
+   git clone https://github.com/IvailoStoianov/NeuralCord.git
+   cd NeuralCord
    ```
 
 2. Install dependencies:
@@ -96,27 +109,27 @@ A Dockerfile is provided for easy deployment:
 
 ```bash
 # Build the Docker image
-docker build -t characterai-discord-bot .
+docker build -t neuralcord-bot .
 
 # Run the container
-docker run -d --name characterai-bot \
+docker run -d --name neuralcord-bot \
   --env-file .env \
   -v $(pwd)/data:/app/data \
-  characterai-discord-bot
+  neuralcord-bot
 ```
 
 ### Systemd Service (Linux)
 
-Create a systemd service file at `/etc/systemd/system/characterai-bot.service`:
+Create a systemd service file at `/etc/systemd/system/neuralcord-bot.service`:
 
 ```ini
 [Unit]
-Description=Character.AI Discord Bot
+Description=Neural Cord Discord Bot
 After=network.target
 
 [Service]
 User=yourusername
-WorkingDirectory=/path/to/characterai-discord-bot/discord-bot
+WorkingDirectory=/path/to/NeuralCord/discord-bot
 ExecStart=/usr/bin/python3 src/bot.py
 Restart=always
 RestartSec=10
@@ -128,17 +141,22 @@ WantedBy=multi-user.target
 Then enable and start the service:
 
 ```bash
-sudo systemctl enable characterai-bot.service
-sudo systemctl start characterai-bot.service
+sudo systemctl enable neuralcord-bot.service
+sudo systemctl start neuralcord-bot.service
 ```
 
 ## Commands
+
+### Finding Character IDs (Quick Note)
+To quickly find a character's ID, open a chat with the desired character on Character.AI. The ID will be visible in the URL: https://character.ai/chat/{character_id}
 
 ### Everyone Commands
 - `/chat [message]` - Talk to the default character
 - `/talk [character_id] [message]` - Talk to a specific character by ID
 - `/listcharacters` - List all available characters
 - `/info` - Show bot information
+
+To complete verification, first use the `/login` command with your email address. You will receive an email containing a verification link within a few seconds. Copy the entire link from the email (note: using "Clean Copy" may not work correctly) and paste it into the `/verify` command to complete the authentication process.
 
 ### Admin Commands
 - `/login [email]` - Start the Character.AI login process
@@ -155,7 +173,6 @@ sudo systemctl start characterai-bot.service
 ## Social Mode
 
 Social Mode allows the character to join conversations naturally without requiring explicit commands. When enabled:
-
 1. The bot monitors messages in channels that have been added with `/addchannel`
 2. A filter AI analyzes conversations to determine when the character should respond
 3. When appropriate, the character will respond naturally as part of the conversation
@@ -171,14 +188,9 @@ To use Social Mode:
 To find a character's ID:
 1. Go to [Character.AI](https://beta.character.ai)
 2. Navigate to the character's page
-3. The ID is in the URL: `https://beta.character.ai/chat?char=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX`
-4. Copy the ID (the part after `char=`)
+3. The ID is in the URL: `https://character.ai/chat/{character_id}`
+4. Copy the ID 
 
-## Beta Testing Guidelines
-
-This is a beta release. Please report any issues and feedback through:
-- GitHub Issues
-- Discord server: [Join Here](https://discord.gg/yourdiscordserver)
 
 ### Known Limitations
 - Character.AI rate limits may apply
@@ -205,4 +217,40 @@ This is a beta release. Please report any issues and feedback through:
 
 ## Credits
 
-Built by NeuralCord 
+- **Character.AI API**: [kramcat/CharacterAI](https://github.com/kramcat/CharacterAI) - Unofficial Python API for Character.AI
+- **Created by**: [Ivailo Stoianov](https://github.com/IvailoStoianov)
+- **First Python Project**: This was my first Python project, so the code might not follow best practices. Feel free to help improve it!
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+This is a community project, and every contribution helps make it better! Here's how you can help:
+
+1. **Report Bugs**
+   - Use the GitHub Issues section
+   - Include detailed steps to reproduce
+   - Share any error messages or logs
+
+2. **Suggest Features**
+   - Open a new issue with the "enhancement" label
+   - Describe your idea in detail
+   - Explain why it would be useful
+
+3. **Submit Code Changes**
+   - Fork the repository
+   - Create a new branch for your feature
+   - Submit a pull request with a clear description
+
+4. **Improve Documentation**
+   - Fix typos or unclear instructions
+   - Add more examples
+   - Translate to other languages
+
+5. **Share Your Experience**
+   - Let me know how you're using the bot
+   - Share screenshots or videos
+   - Suggest improvements based on your usage
+

@@ -5,7 +5,7 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
-    container_name: characterai-discord-bot
+    container_name: neuralcord
     restart: unless-stopped
     volumes:
       - ./data:/app/data
